@@ -11,8 +11,6 @@ counts & community activity stream straight into your dashboard.
 
 - **Accounts** — register / login / logout with a beautiful animated auth
   screen. bcrypt-hashed passwords, JWT sessions in httpOnly cookies.
-  One-click **demo vault** (`gamer@gamevault.app` / `demo1234`, pre-loaded
-  with 35 games, 170 sessions).
 - **Vault & statuses** — PLAYING, COMPLETED, ON_HOLD, BACKLOG, WISHLIST,
   DROPPED per user per game, with start date, finish date, rating (0-10),
   favorite, notes and hours.
@@ -58,7 +56,7 @@ also provide an existing PostgreSQL server via `DATABASE_URL`.
 bun install
 bun run db:generate
 bun run db:push     # starts local Postgres if needed, pushes schema
-bun run db:seed     # optional: demo user + catalog from the SQLite snapshot
+bun run db:seed     # optional: load the game catalog
 bun run dev         # http://localhost:3000
 ```
 
@@ -92,8 +90,7 @@ PlaySession) is created in Neon and the app connects over TLS.
 Import the GitHub repository as a Next.js project and set `DATABASE_URL`,
 `DIRECT_URL`, and `AUTH_SECRET` in the Vercel environment. Run
 `bun run db:push` against your production database once before testing sign-in.
-If you seed the demo account, use a separate test database because its
-credentials are public.
+Run `bun run db:seed` to populate the public game catalog.
 
 The default deployment runs the Next.js app. The Socket.IO service requires
 its own deployment and routing as described below.
@@ -103,7 +100,7 @@ its own deployment and routing as described below.
 ```
 prisma/schema.prisma          # PostgreSQL schema (multi-user)
 scripts/pg-ensure.mjs         # embedded local Postgres manager
-scripts/seed-postgres.mjs     # data migration / demo seed
+scripts/seed-postgres.mjs     # catalog seed
 src/lib/auth.ts               # JWT session + bcrypt helpers
 src/lib/db.ts                 # Prisma client (URL resolver for Neon/local)
 src/lib/socket.tsx            # realtime client (zustand + react-query hooks)

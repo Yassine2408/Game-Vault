@@ -1,0 +1,134 @@
+// GameVault schema — a personal game tracker (statuses, dates, ratings, sessions)
+// Database: PostgreSQL — NeonDB-compatible out of the box.
+//   local dev  → embedded Postgres (scripts/pg-ensure.mjs)
+//   production → Neon serverless Postgres (see README → NeonDB setup)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  username     String   @unique
+  passwordHash String
+  displayName  String
+  accent       String   @default("violet") // avatar gradient accent: violet | emerald | amber | rose | cyan
+  createdAt    DateTime @default(now())
+
+  entries   LibraryEntry[]
+  sessions  PlaySession[]
+}
+
+model Game {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  summary     String?
+  developer   String?
+  publisher   String?
+  releaseDate DateTime?
+  criticScore Int? // Metacritic score (0-100)
+  coverUrl    String? // wide banner
+  posterUrl   String? // portrait capsule used in grids
+  heroUrl     String? // large screenshot for detail backdrop
+  screenshots String? // JSON array of URLs
+  tags        String? // JSON array e.g. ["Single-player", "Co-op"]
+  source      String   @default("steam") // "steam" | "manual"
+  steamAppId  Int?     @unique
+  createdAt   DateTime @default(now())
+
+  genres    GameGenre[]
+  platforms GamePlatform[]
+  entries   LibraryEntry[]
+  sessions  PlaySession[]
+}
+
+model Genre {
+  id   String @id @default(cuid())
+  name String @unique
+  slug String @unique
+
+  games GameGenre[]
+}
+
+model Platform {
+  id   String @id @default(cuid())
+  name String @unique
+  slug String @unique
+
+  games GamePlatform[]
+}
+
+model GameGenre {
+  gameId  String
+  genreId String
+  game    Game   @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  genre   Genre  @relation(fields: [genreId], references: [id], onDelete: Cascade)
+
+  @@id([gameId, genreId])
+}
+
+model GamePlatform {
+  gameId     String
+  platformId String
+  game       Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  platform   Platform @relation(fields: [platformId], references: [id], onDelete: Cascade)
+
+  @@id([gameId, platformId])
+}
+
+enum EntryStatus {
+  PLAYING
+  COMPLETED
+  ON_HOLD
+  BACKLOG
+  WISHLIST
+  DROPPED
+}
+
+// One library entry per (user, game)
+model LibraryEntry {
+  id          String      @id @default(cuid())
+  userId      String
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  gameId      String
+  game        Game        @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  status      EntryStatus @default(BACKLOG)
+  rating      Int? // personal score 0-10
+  hoursPlayed Float       @default(0)
+  startDate   DateTime? // when I started playing
+  finishDate  DateTime? // when I ended / finished it
+  favorite    Boolean     @default(false)
+  notes       String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  sessions PlaySession[]
+
+  @@unique([userId, gameId])
+  @@index([userId, updatedAt])
+}
+
+// Play session log — feeds activity feed & playtime stats
+model PlaySession {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  gameId    String
+  game      Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  entry     LibraryEntry? @relation(fields: [entryId], references: [id], onDelete: SetNull)
+  entryId   String?
+  minutes   Int
+  playedOn  DateTime @default(now())
+  note      String?
+  createdAt DateTime @default(now())
+
+  @@index([userId, playedOn])
+}
