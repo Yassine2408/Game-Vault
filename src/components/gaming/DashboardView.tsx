@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import { NovaInsight } from "./Nova";
 import { useQuery } from "@tanstack/react-query";
 import { format, formatDistanceToNow } from "date-fns";
 import {
@@ -160,15 +161,9 @@ function LivePulse({ dbActivity }: { dbActivity: StatsResponse["activity"] }) {
       rating: a.type === "finish" ? a.rating ?? undefined : undefined,
       ts: a.date,
     }));
-    const all = [...liveItems, ...mapped];
-    const seen = new Set<string>();
-    return all
-      .filter((a) => {
-        const key = `${a.kind}:${a.game.name}:${a.ts.slice(0, 16)}`;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      })
+    const key = (event: LiveActivity) => `${event.kind}:${event.game.name}:${event.ts.slice(0, 16)}`;
+    const persisted = new Set(mapped.map(key));
+    return [...mapped, ...liveItems.filter((event) => !persisted.has(key(event)))]
       .sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime())
       .slice(0, 14);
   }, [liveItems, dbActivity]);
@@ -291,6 +286,7 @@ export function DashboardView() {
       </div>
 
       <CompletionMilestone finished={stats.totals.finished} />
+      <NovaInsight mode="briefing" />
 
       {/* continue playing (with live Steam player counts) */}
       <section>

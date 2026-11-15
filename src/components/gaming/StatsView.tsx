@@ -1,5 +1,6 @@
 "use client";
 
+import { NovaInsight } from "./Nova";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import {
@@ -87,6 +88,8 @@ export function StatsView() {
         <h1 className="font-display text-2xl font-bold tracking-tight sm:text-3xl">Stats & insights</h1>
         <p className="mt-1 text-sm text-muted-foreground">The story of your gaming life, in numbers.</p>
       </div>
+
+      <NovaInsight mode="dna" />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard label="Games tracked" value={t.gamesTracked} icon={Layers} accent="bg-violet-500/15 text-violet-300" delay={0} />

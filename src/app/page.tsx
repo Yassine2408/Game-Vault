@@ -5,6 +5,7 @@ import { AnimatePresence, motion, MotionConfig } from "framer-motion";
 import { Gamepad2 } from "lucide-react";
 import { useState } from "react";
 import { LoadError } from "@/components/gaming/Bits";
+import { NovaCompanion } from "@/components/gaming/Nova";
 import { AppHeader } from "@/components/gaming/AppHeader";
 import { DashboardView } from "@/components/gaming/DashboardView";
 import { LibraryView } from "@/components/gaming/LibraryView";
@@ -61,6 +62,7 @@ function AuthGate() {
 
       {/* dialogs */}
       <DialogsHost />
+      <NovaCompanion key={authQ.data.user.id} userId={authQ.data.user.id} />
     </div>
   );
 }
