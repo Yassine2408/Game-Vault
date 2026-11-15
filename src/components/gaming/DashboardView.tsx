@@ -13,10 +13,8 @@ import {
   Check,
   Timer,
   ArrowRight,
-  Shuffle,
   Star,
   Radio,
-  Users,
   Plus,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -25,6 +23,7 @@ import { useUI } from "@/lib/store";
 import { api, type EntryDTO, type StatsResponse } from "@/lib/client";
 import { useLive, type LiveActivity } from "@/lib/socket";
 import { GamePoster } from "./GamePoster";
+import { CompletionMilestone, PlayNext } from "./PlayNext";
 import { AnimatedNumber, CriticScore, EmptyState, LoadError, LiveDot, RatingStars, SectionTitle, StatCard, StatusBadge } from "./Bits";
 
 const KIND_ICON = {
@@ -235,12 +234,12 @@ function LiveBadge() {
 }
 
 export function DashboardView() {
-  const { setView, openDetail, openTrack } = useUI();
+  const setView = useUI((state) => state.setView);
+  const openDetail = useUI((state) => state.openDetail);
+  const openTrack = useUI((state) => state.openTrack);
   const libraryQ = useQuery({ queryKey: ["library"], queryFn: api.library, select: (d) => d.items });
   const statsQ = useQuery({ queryKey: ["stats"], queryFn: api.stats });
-  const players = useLive((s) => s.players);
-  const presence = useLive((s) => s.presence);
-  const connected = useLive((s) => s.connected);
+
 
   if (libraryQ.isLoading || statsQ.isLoading) {
     return (
@@ -279,76 +278,9 @@ export function DashboardView() {
   const backlogCands = [...backlog]
     .sort((a, b) => (b.game.criticScore ?? -1) - (a.game.criticScore ?? -1))
     .slice(0, 4);
-  const featuredGame = playing[0]?.game ?? backlogCands[0]?.game;
-  const heroArt = featuredGame?.heroUrl || featuredGame?.coverUrl || featuredGame?.posterUrl;
-
-  // live aggregate: players in tracked games right now
-  const trackedAppIds = entries.map((e) => e.game.steamAppId).filter((x): x is number => !!x);
-  const inGameNow = trackedAppIds.reduce((a, id) => a + (players[String(id)] ?? 0), 0);
-  const hasPlayerData = trackedAppIds.some((id) => players[String(id)] != null);
-
   return (
     <div className="space-y-7">
-      {/* hero */}
-      <motion.section
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-        className="relative isolate flex min-h-64 items-end overflow-hidden rounded-3xl border border-white/10 bg-[#14121e] px-5 py-6 text-white sm:px-9 sm:py-8"
-      >
-        {featuredGame && heroArt && (
-          <div aria-hidden="true" className="pointer-events-none absolute inset-y-0 right-0 w-full sm:w-4/5">
-            <GamePoster key={heroArt} src={heroArt} name={featuredGame.name} className="h-full w-full" wide priority />
-          </div>
-        )}
-        <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-r from-[#14121e] via-[#14121e]/90 to-[#14121e]/30" />
-        <div className="relative flex w-full flex-wrap items-end justify-between gap-5">
-          <div>
-            {featuredGame && <p className="text-sm font-medium text-violet-200">{featuredGame.name}</p>}
-            <h1 className="mt-2 font-display text-3xl font-bold tracking-tight sm:text-4xl">
-              {playing.length > 0 ? (
-                <>
-                  Right now, you&apos;re playing <span className="text-violet-300">{playing.length}</span> game
-                  {playing.length > 1 ? "s" : ""}
-                </>
-              ) : (
-                <>
-                  Nothing in progress — <span className="text-violet-300">pick your next world</span>
-                </>
-              )}
-            </h1>
-            <p className="mt-2 max-w-xl text-sm text-zinc-300">
-              {stats
-                ? `${stats.totals.gamesTracked} games tracked · ${stats.totals.finished} finished · ${stats.totals.totalHours} hours logged · ${stats.totals.completionRate}% completion rate`
-                : ""}
-            </p>
-          </div>
-          <div className="flex flex-col items-stretch gap-2 sm:items-end">
-            <Button
-              className="bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white hover:from-violet-500 hover:to-fuchsia-500"
-              onClick={() => setView("discover")}
-            >
-              <Gamepad2 className="mr-2 h-4 w-4" /> Find a game
-            </Button>
-            <span className="flex flex-wrap items-center gap-1.5 text-[11px] font-medium text-zinc-300">
-              {connected ? (
-                <>
-                  <LiveDot /> {presence} gamers online ·{" "}
-                  {hasPlayerData && (
-                    <span className="inline-flex items-center gap-1 font-bold text-emerald-300">
-                      <Users className="h-3 w-3" />
-                      <AnimatedNumber value={inGameNow} className="text-emerald-300" /> playing on Steam right now
-                    </span>
-                  )}
-                  {!hasPlayerData && "live data connecting…"}
-                </>
-              ) : (
-                "connecting to live service…"
-              )}
-            </span>
-          </div>
-        </div>
-      </motion.section>
+      <PlayNext entries={entries} playing={playing} backlog={backlog} />
 
       {/* stat strip */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -357,6 +289,8 @@ export function DashboardView() {
         <StatCard label="Hours logged" value={stats.totals.totalHours} icon={Clock} accent="bg-amber-500/15 text-amber-300" delay={0.12} />
         <StatCard label="Backlog size" value={stats.totals.backlog} icon={Layers} accent="bg-fuchsia-500/15 text-fuchsia-300" delay={0.18} />
       </div>
+
+      <CompletionMilestone finished={stats.totals.finished} />
 
       {/* continue playing (with live Steam player counts) */}
       <section>
@@ -434,14 +368,6 @@ export function DashboardView() {
             <SectionTitle
               title="Next up"
               sub="Highest critic scores in your backlog"
-              action={backlog.length > 0 && (
-                <Button variant="outline" size="sm" onClick={() => {
-                  const pick = backlog[Math.floor(Math.random() * backlog.length)];
-                  openDetail(pick.game);
-                }}>
-                  <Shuffle className="h-4 w-4" /> Pick a game
-                </Button>
-              )}
             />
             {backlogCands.length === 0 ? (
               <EmptyState icon={Layers} title="Backlog is empty" sub="Nice focus. Add games you plan to play." />
