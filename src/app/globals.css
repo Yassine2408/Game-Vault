@@ -121,6 +121,10 @@
     @apply bg-background text-foreground;
     font-feature-settings: "cv11", "ss01";
   }
+  :where(button, [role="button"], input:is([type="button"], [type="submit"], [type="reset"])):not(:disabled, [aria-disabled="true"], [data-disabled]) {
+    cursor: pointer;
+  }
+
   ::selection {
     background: oklch(0.65 0.22 300 / 0.35);
   }
