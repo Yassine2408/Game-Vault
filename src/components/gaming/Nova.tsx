@@ -12,15 +12,15 @@ import { readLines, type NovaEvent, type NovaMode, type NovaPlan } from "@/lib/n
 import { getClientTag } from "@/lib/socket";
 import { cn } from "@/lib/utils";
 
-type Message = { role: "user" | "assistant"; text: string; plan?: NovaPlan; notice?: string; id: string };
-const useNova = create<{ open: boolean; draft: string; show: (draft: string) => void; close: () => void }>((set) => ({
-  open: false, draft: "", show: (draft) => set({ open: true, draft }), close: () => set({ open: false }),
+type Message = { role: "user" | "assistant"; text: string; plan?: NovaPlan; notice?: string; external?: boolean; id: string };
+const useNova = create<{ open: boolean; draft: string; externalAi: boolean; setExternalAi: (enabled: boolean) => void; show: (draft: string) => void; close: () => void }>((set) => ({
+  open: false, draft: "", externalAi: false, setExternalAi: (externalAi) => set({ externalAi }), show: (draft) => set({ open: true, draft }), close: () => set({ open: false }),
 }));
 
-async function askNova(mode: NovaMode, messages: Pick<Message, "role" | "text">[], onEvent: (event: NovaEvent) => void, signal: AbortSignal) {
+async function askNova(mode: NovaMode, messages: Pick<Message, "role" | "text">[], onEvent: (event: NovaEvent) => void, signal: AbortSignal, externalAi: boolean) {
   const res = await fetch("/api/nova", {
     method: "POST", signal, headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ mode, today: format(new Date(), "yyyy-MM-dd"), messages }),
+    body: JSON.stringify({ mode, today: format(new Date(), "yyyy-MM-dd"), messages, allowExternalAi: externalAi ? true : undefined }),
   });
   if (!res.ok || !res.body) {
     const error = await res.json().catch(() => ({}));
@@ -84,7 +84,7 @@ function PlanCard({ plan, onSaved }: { plan: NovaPlan; onSaved: () => void }) {
 export function NovaCompanion({ userId }: { userId: string }) {
   const query = useQueryClient();
   const channel = useRef<BroadcastChannel>(null);
-  const { open, draft, show, close } = useNova();
+  const { open, draft, show, close, externalAi, setExternalAi } = useNova();
   const [text, setText] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [busy, setBusy] = useState(false);
@@ -100,7 +100,7 @@ export function NovaCompanion({ userId }: { userId: string }) {
     return () => { channel.current = null; sync.close(); };
   }, [query, userId]);
   useEffect(() => { bottom.current?.scrollIntoView({ block: "nearest" }); }, [messages, open]);
-  useEffect(() => () => { active.current?.abort(); close(); }, [close]);
+  useEffect(() => () => { active.current?.abort(); close(); setExternalAi(false); }, [close, setExternalAi]);
 
   async function send(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -108,9 +108,9 @@ export function NovaCompanion({ userId }: { userId: string }) {
     if (!prompt || active.current) return;
     const controller = new AbortController();
     active.current = controller;
-    const user: Message = { id: crypto.randomUUID(), role: "user", text: prompt };
-    const reply: Message = { id: crypto.randomUUID(), role: "assistant", text: "" };
-    const history = [...messages.filter((item) => item.text && !item.notice), user]
+    const user: Message = { id: crypto.randomUUID(), role: "user", text: prompt, external: externalAi };
+    const reply: Message = { id: crypto.randomUUID(), role: "assistant", text: "", external: externalAi };
+    const history = [...messages.filter((item) => item.text && !item.notice && (!externalAi || item.external)), user]
       .slice(-10).map((item) => ({ role: item.role, text: item.text.slice(0, 2500) }));
     setMessages((items) => [...items, user, reply]);
     setText("");
@@ -125,7 +125,7 @@ export function NovaCompanion({ userId }: { userId: string }) {
           case "notice": return { ...item, notice: event.text };
           case "text": return { ...item, text: item.text + event.text };
         }
-      }), controller.signal);
+      }), controller.signal, externalAi);
     } catch (error) {
       if (!controller.signal.aborted) update((item) => ({ ...item, notice: error instanceof Error ? error.message : "Nova couldn’t respond." }));
     } finally {
@@ -145,6 +145,12 @@ export function NovaCompanion({ userId }: { userId: string }) {
         <header className="border-b border-border bg-primary/10 px-5 py-4 pr-12">
           <DialogTitle className="flex items-center gap-2 font-display text-xl"><Sparkles aria-hidden="true" className="size-5 text-primary" /> Nova</DialogTitle>
           <DialogDescription className="mt-1 text-xs">Ask about your vault or propose an update.</DialogDescription>
+          <label className="mt-3 flex items-start gap-2 text-xs leading-relaxed text-muted-foreground">
+            <input type="checkbox" checked={externalAi} disabled={busy} onChange={(event) => setExternalAi(event.target.checked)} className="mt-0.5 size-4 shrink-0 accent-violet-500" />
+            <span><strong className="text-foreground">Use external AI for this session</strong><br />
+              Shares game titles, ratings, playtime and dates, plus messages sent in AI mode, with Vercel AI Gateway and its OpenAI model. Turn off anytime.
+            </span>
+          </label>
         </header>
         <div className="min-h-0 space-y-3 overflow-y-auto px-4 py-4" aria-label="Nova conversation">
           {messages.length === 0 && (
@@ -181,6 +187,7 @@ export function NovaCompanion({ userId }: { userId: string }) {
 
 export function NovaInsight({ mode }: { mode: "briefing" | "dna" }) {
   const show = useNova((state) => state.show);
+  const externalAi = useNova((state) => state.externalAi);
   const [response, setResponse] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
@@ -200,7 +207,7 @@ export function NovaInsight({ mode }: { mode: "briefing" | "dna" }) {
       await askNova(mode, [], (event) => {
         if (event.type === "text") setResponse((current) => current + event.text);
         if (event.type === "notice") setNotice(event.text);
-      }, controller.signal);
+      }, controller.signal, externalAi);
     } catch (error) {
       if (!controller.signal.aborted) setNotice(error instanceof Error ? error.message : "Nova couldn’t respond.");
     } finally {
@@ -223,6 +230,7 @@ export function NovaInsight({ mode }: { mode: "briefing" | "dna" }) {
           {busy ? <><LoaderCircle className="motion-safe:animate-spin" /> Analyzing…</> : response ? "Refresh" : briefing ? "Get briefing" : "Analyze my vault"}
         </Button>
       </div>
+      {externalAi && <p className="mt-2 text-xs text-muted-foreground">External AI enabled for this session</p>}
       {response && <p className="mt-4 max-w-3xl whitespace-pre-wrap break-words text-sm leading-relaxed">{response}</p>}
       {notice && <p role="status" className="mt-3 text-sm text-muted-foreground">{notice}</p>}
       <Button size="sm" variant="ghost" className="mt-3" onClick={() => show(briefing
