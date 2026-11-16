@@ -39,7 +39,14 @@ export async function* streamNovaGateway(request: Request, mode: NovaMode, messa
       ],
     }),
   });
-  if (!response.ok || !response.body) throw new Error(`gateway-http-${response.status}`);
+  if (!response.ok || !response.body) {
+    const failure = await response.json().catch(() => null);
+    const error = failure?.error;
+    const knownCodes = ["customer_verification_required", "access_denied", "insufficient_credits", "rate_limit_exceeded", "model_not_found", "invalid_api_key"];
+    const knownCode = [error?.code, error?.type, failure?.code, failure?.type]
+      .find((code) => knownCodes.includes(code));
+    throw new Error(knownCode ? `gateway-${knownCode.replaceAll("_", "-")}` : `gateway-http-${response.status}`);
+  }
   for await (const line of readLines(response.body)) {
     if (!line.startsWith("data:")) continue;
     const data = line.slice(5).trim();
